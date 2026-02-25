@@ -168,7 +168,6 @@ class ImageProcessorApp(QMainWindow):
         self.selected_images = []
         self.use_custom_text = False
         self.custom_text = ""
-        self.output_folder = ""
         self.processor_thread = None
 
         self.create_widgets()
@@ -397,7 +396,6 @@ class ImageProcessorApp(QMainWindow):
         
         dest_layout = QHBoxLayout()
         self.output_folder_input = QLineEdit()
-        self.output_folder_input.setReadOnly(True)
         self.output_folder_input.setPlaceholderText("Pasta de destino...")
         dest_layout.addWidget(self.output_folder_input)
 
@@ -489,11 +487,11 @@ class ImageProcessorApp(QMainWindow):
     def select_output_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Selecionar Pasta de Saída")
         if folder:
-            self.output_folder = folder
             self.output_folder_input.setText(folder)
 
     def start_processing(self):
-        if not self.selected_images or not self.output_folder:
+        output_folder = self.output_folder_input.text()
+        if not self.selected_images or not output_folder:
             QMessageBox.critical(self, "Erro", "Selecione as imagens e a pasta de destino.")
             return
 
@@ -512,7 +510,7 @@ class ImageProcessorApp(QMainWindow):
         wm_text = self.wm_input.text() if self.wm_checkbox.isChecked() else ""
 
         self.processor_thread = ImageProcessorThread(
-            self.selected_images, self.output_folder,
+            self.selected_images, output_folder,
             self.custom_text_checkbox.isChecked(), self.custom_text_input.text(),
             wm_text
         )
