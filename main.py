@@ -1,4 +1,5 @@
 import sys
+import platform
 from pathlib import Path
 from PIL import Image, ImageFilter, ImageDraw, ImageFont, ImageEnhance
 from PySide6.QtWidgets import (
@@ -80,10 +81,29 @@ class ImageProcessorThread(QThread):
         except Exception as e:
             self.error_occurred.emit(f"Erro ao processar: {str(e)}")
 
+    def _find_font_path(self):
+        if platform.system() == "Windows":
+            candidates = ["C:/Windows/Fonts/impact.ttf"]
+        else:
+            candidates = [
+                "/usr/share/fonts/TTF/impact.ttf",
+                "/usr/share/fonts/truetype/msttcorefonts/impact.ttf",
+                "/usr/share/fonts/truetype/impact.ttf",
+                "/usr/share/fonts/impact.ttf",
+                "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/noto/NotoSans-Bold.ttf",
+            ]
+        for path in candidates:
+            if Path(path).exists():
+                return path
+        return None
+
     def process_single_image(self, img, text, watermark=""):
         SIZE = (1280, 720)
         BLUR_RADIUS = 16
-        FONT_PATH = "C:/Windows/Fonts/impact.ttf"
+        FONT_PATH = self._find_font_path()
         DARKEN_FACTOR = 0.3
 
         img = img.convert("RGB").resize(SIZE, Image.LANCZOS)
@@ -94,29 +114,23 @@ class ImageProcessorThread(QThread):
         draw = ImageDraw.Draw(mask)
 
         # --- TEXTO CENTRAL ---
-        max_font_size = int(SIZE[1] * 0.7)
-        font_size = max_font_size
+        font_size = int(SIZE[1] * 0.7)
+        font = None
 
-        try:
-            font = ImageFont.truetype(FONT_PATH, font_size)
-        except:
-            font = ImageFont.load_default()
-            max_font_size = int(SIZE[1] * 0.2)
-            font_size = max_font_size
+        if FONT_PATH:
+            while font_size > 10:
+                try:
+                    f = ImageFont.truetype(FONT_PATH, font_size)
+                    bbox = draw.textbbox((0, 0), text, font=f)
+                    if (bbox[2] - bbox[0]) < SIZE[0] * 0.9 and (bbox[3] - bbox[1]) < SIZE[1] * 0.9:
+                        font = f
+                        break
+                except Exception:
+                    break
+                font_size -= 5
 
-        while font_size > 10:
-            try:
-                font = ImageFont.truetype(FONT_PATH, font_size)
-            except:
-                font = ImageFont.load_default()
-
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-
-            if text_width < SIZE[0] * 0.9 and text_height < SIZE[1] * 0.9:
-                break
-            font_size -= 5
+        if font is None:
+            font = ImageFont.load_default(size=int(SIZE[1] * 0.2))
 
         draw.text(
             (SIZE[0] // 2, SIZE[1] // 2),
@@ -128,15 +142,11 @@ class ImageProcessorThread(QThread):
 
         # --- MARCA D'ÁGUA (Vazada também) ---
         if watermark:
-            wm_font_size = 35 # Levemente maior para compensar o estilo vazado
+            wm_font_size = 35
             try:
-                # Usa a mesma fonte impact para manter o estilo vazado padrão
-                wm_font = ImageFont.truetype(FONT_PATH, wm_font_size)
-            except:
-                try:
-                    wm_font = ImageFont.truetype("arial.ttf", wm_font_size)
-                except:
-                    wm_font = ImageFont.load_default()
+                wm_font = ImageFont.truetype(FONT_PATH, wm_font_size) if FONT_PATH else ImageFont.load_default(size=wm_font_size)
+            except Exception:
+                wm_font = ImageFont.load_default(size=wm_font_size)
             
             wm_bbox = draw.textbbox((0, 0), watermark, font=wm_font)
             wm_width = wm_bbox[2] - wm_bbox[0]
